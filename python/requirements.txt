@@ -1,0 +1,15 @@
+# Lab Streaming Layer Python bindings. Bundles liblsl wheels on macOS / Linux /
+# Windows so no separate liblsl install is needed for development.
+pylsl>=1.16.2
+
+# WebSocket server for the browser -> LSL marker bridge.
+websockets>=13.0
+
+# EEG analysis and EDF I/O. Used by analyze_session.py.
+mne>=1.7.0
+
+# numpy / scipy come in transitively via mne; pinned loosely here so a fresh
+# venv resolves to a recent-enough wheel for python 3.11+.
+numpy>=1.26
+scipy>=1.11
+pandas>=2.1

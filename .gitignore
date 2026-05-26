@@ -44,3 +44,15 @@ next-env.d.ts
 # local CSV exports (generated per run)
 data/exports/*.csv
 
+# Python virtualenv + caches for the LSL marker bridge / session logger /
+# analyzer. Each lab machine creates its own; nothing here is portable.
+python/.venv/
+python/__pycache__/
+**/__pycache__/
+*.pyc
+
+# EEG session outputs — recordings stay on the lab machine, not in git.
+python/sessions/
+*.edf
+*.fif
+
