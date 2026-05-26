@@ -3,18 +3,47 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import GameScreen from "@/components/GameScreen";
 import ResultScreen from "@/components/ResultScreen";
-import CartoonPerson from "@/components/CartoonPerson";
-import CartoonPet from "@/components/CartoonPet";
+import LegendFigure from "@/components/LegendFigure";
+import RasterSprite from "@/components/RasterSprite";
 import { SCENARIOS } from "@/data/scenarios";
 import { variantForAge } from "@/lib/ageIcons";
 import { roleLegendCaption } from "@/lib/roles";
+import { getHumanSpriteSrc, getPetSpriteSrc } from "@/lib/referenceSprites";
+import { useLSLMarkers, formatMarker } from "@/lib/lslMarkers";
+import {
+  BETWEEN_SCENARIOS_MS,
+  RESULT_VISIBLE_MS,
+  TOTAL_SCENARIOS,
+} from "@/lib/runConfig";
 
-const RESULT_VISIBLE_MS = 2400;
-const BETWEEN_SCENARIOS_MS = 1000;
+// LAB DECISION: the EEG bridge is on by default. To run the game without
+// trying to reach the LSL marker bridge (e.g. demo / dev on a laptop with
+// no headset), launch with NEXT_PUBLIC_LSL_ENABLED=false.
+const LSL_ENABLED =
+  (process.env.NEXT_PUBLIC_LSL_ENABLED ?? "true").toLowerCase() !== "false";
+
+// LAB DECISION: condition label per scenario, used in marker labels and
+// for downstream epoch grouping. Mirrors the 4-tier difficulty structure
+// documented at the top of data/scenarios.js (5 scenarios per set).
+//   set1_baseline       — pure count asymmetry, all legal adults
+//   set2_legality_age   — jaywalking + child/elder introduced
+//   set3_roles_pets     — counts tight, qualitative weighting
+//   set4_max_dilemma    — equal counts, every variable active
+function conditionForScenario(scenario) {
+  const tier = Math.ceil(scenario.id / 5);
+  switch (tier) {
+    case 1: return "set1_baseline";
+    case 2: return "set2_legality_age";
+    case 3: return "set3_roles_pets";
+    case 4: return "set4_max_dilemma";
+    default: return `set${tier}`;
+  }
+}
+
 const LEGEND_PEOPLE = [
-  { age: 10, attire: "student", label: "Child", gender: "female", skinTone: "light" },
-  { age: 32, attire: "professional", label: "Adult", gender: "male", skinTone: "tan" },
-  { age: 72, attire: "medical", label: "Elder", gender: "female", skinTone: "dark" },
+  { age: 10, attire: "student", label: "Child" },
+  { age: 32, attire: "professional", label: "Adult" },
+  { age: 72, attire: "medical", label: "Elder" },
 ];
 const LEGEND_ROLES = [
   "professional",
@@ -24,8 +53,6 @@ const LEGEND_ROLES = [
   "athlete",
   "casual",
 ];
-const LEGEND_SKIN_TONES = ["veryLight", "light", "medium", "tan", "dark"];
-
 function buildExplanation(scenario, choice) {
   const leftN = scenario.left.count;
   const rightN = scenario.right.count;
@@ -42,6 +69,27 @@ function choiceLabel(choice) {
   return "Time up — defaulted to STAY RIGHT";
 }
 
+/**
+ * Tiny operator-facing pill that shows whether the LSL marker bridge is
+ * reachable. Visible to whoever is running the session — NOT participant-
+ * facing diagnostic data. Color-coded so a glance is enough to know
+ * whether a session would record markers right now.
+ */
+function LSLStatusPill({ status }) {
+  const tone = {
+    open: { dot: "bg-emerald-400", text: "text-emerald-300", label: "LSL bridge connected" },
+    connecting: { dot: "bg-amber-400 animate-pulse", text: "text-amber-300", label: "LSL bridge connecting…" },
+    closed: { dot: "bg-red-500", text: "text-red-300", label: "LSL bridge DOWN — markers not recording" },
+    disabled: { dot: "bg-zinc-600", text: "text-zinc-400", label: "LSL bridge disabled (dev mode)" },
+  }[status] ?? { dot: "bg-zinc-600", text: "text-zinc-400", label: `LSL ${status}` };
+  return (
+    <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-black/40 px-3 py-1 text-[11px] font-semibold">
+      <span className={`inline-block h-2 w-2 rounded-full ${tone.dot}`} />
+      <span className={tone.text}>{tone.label}</span>
+    </div>
+  );
+}
+
 export default function Home() {
   const [phase, setPhase] = useState("consent");
   const [scenarioIndex, setScenarioIndex] = useState(0);
@@ -50,9 +98,6 @@ export default function Home() {
   const [runId, setRunId] = useState(null);
   const [runStartedAt, setRunStartedAt] = useState(null);
   const [lastOutcome, setLastOutcome] = useState(null);
-  const [stats, setStats] = useState(null);
-  const [statsLoading, setStatsLoading] = useState(false);
-  const [statsError, setStatsError] = useState(null);
   const [consentChecked, setConsentChecked] = useState(false);
   const [diskLogStatus, setDiskLogStatus] = useState("idle"); // idle|saving|saved|error
   const [diskLogError, setDiskLogError] = useState(null);
@@ -65,12 +110,35 @@ export default function Home() {
 
   const scenario = SCENARIOS[scenarioIndex];
 
+  // LSL marker stream. `pushMarker(label)` synchronously enqueues a frame
+  // on the WebSocket to python/marker_bridge.py, which immediately calls
+  // pylsl push_sample() — the same LSL clock EmotivPRO uses for sync.
+  // NEVER replace this with Date.now() or performance.now(): the recording
+  // alignment depends on LSL stamping the sample at the bridge.
+  const { pushMarker, status: lslStatus } = useLSLMarkers({ enabled: LSL_ENABLED });
+  // Keep a stable ref so effect dependency arrays don't capture stale closures.
+  const pushMarkerRef = useRef(pushMarker);
+  pushMarkerRef.current = pushMarker;
+
   const recordDecision = useCallback((choice, reactionMs) => {
     if (decidedRef.current) return;
     decidedRef.current = true;
 
     const idx = scenarioIndexRef.current;
     const sc = SCENARIOS[idx];
+
+    // CHOICE marker: response-locked event for ERP analysis. Push BEFORE
+    // any state updates so the LSL timestamp reflects the moment the
+    // participant's keypress / click was received, not the React commit.
+    pushMarkerRef.current(
+      formatMarker("choice", {
+        trial: sc.id,
+        condition: conditionForScenario(sc),
+        side: choice, // "left" | "right" | "timeout"
+        rt_ms: Math.round(reactionMs),
+      }),
+    );
+
     const entry = {
       scenarioId: sc.id,
       choice,
@@ -86,14 +154,11 @@ export default function Home() {
     });
     setPlaying(false);
     setPhase("result");
-    setStats(null);
-    setStatsError(null);
-    setStatsLoading(true);
   }, []);
 
   const startRun = () => {
     const now = Date.now();
-    setRunId(`run_${now}_${Math.random().toString(16).slice(2)}`);
+    setRunId(`run_${now}`);
     setRunStartedAt(new Date(now).toISOString());
     diskLoggedRef.current = false;
     setDiskLogStatus("idle");
@@ -102,6 +167,12 @@ export default function Home() {
     setDecisions([]);
     setScenarioIndex(0);
     setLastOutcome(null);
+
+    // SESSION_START marker: the bookend for all trial markers in this
+    // recording. The session_logger.py CSV uses this as the t=0 reference
+    // for relative offsets in QA reports.
+    pushMarkerRef.current(formatMarker("session_start"));
+
     setPhase("playing");
   };
 
@@ -109,6 +180,26 @@ export default function Home() {
     if (phase !== "playing") return;
     decidedRef.current = false;
     scenarioStartRef.current = Date.now();
+
+    const sc = SCENARIOS[scenarioIndexRef.current];
+    const cond = conditionForScenario(sc);
+
+    // TRIAL_START marker: trial bookend. Fired one render tick before the
+    // scene is fully painted.
+    pushMarkerRef.current(
+      formatMarker("trial_start", { trial: sc.id, condition: cond }),
+    );
+
+    // SCENARIO_ONSET marker: the primary STIMULUS-LOCKED event for ERP
+    // analysis. This effect runs after React commits but before the
+    // browser paints — close enough that the LSL stamp is within one
+    // frame of the participant seeing the scenario. If sub-frame
+    // precision becomes a research requirement, move this push into a
+    // useLayoutEffect inside GameScreen keyed on scenarioKey.
+    pushMarkerRef.current(
+      formatMarker("scenario_onset", { trial: sc.id, condition: cond }),
+    );
+
     setPlaying(true);
   }, [phase, scenarioIndex]);
 
@@ -133,39 +224,35 @@ export default function Home() {
   useEffect(() => {
     if (phase !== "result") return;
 
-    let cancelled = false;
-    fetch("/api/stats")
-      .then((r) => {
-        if (!r.ok) throw new Error("Stats failed");
-        return r.json();
-      })
-      .then((data) => {
-        if (!cancelled) {
-          setStats(data);
-          setStatsLoading(false);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setStatsError("Could not load stats.");
-          setStatsLoading(false);
-        }
-      });
+    // OUTCOME_SHOWN marker: the ResultScreen is now on-screen.
+    // LAB DECISION: the current build always shows an outcome popup. If
+    // a future protocol removes it for some trials, conditionally skip
+    // this push.
+    const sc = lastOutcome?.scenario;
+    if (sc) {
+      pushMarkerRef.current(
+        formatMarker("outcome_shown", {
+          trial: sc.id,
+          condition: conditionForScenario(sc),
+        }),
+      );
+    }
 
-    const t1 = setTimeout(() => {
-      if (!cancelled) setPhase("gap");
-    }, RESULT_VISIBLE_MS);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(t1);
-    };
+    const t1 = setTimeout(() => setPhase("gap"), RESULT_VISIBLE_MS);
+    return () => clearTimeout(t1);
   }, [phase, lastOutcome?.scenario?.id]);
 
   useEffect(() => {
     if (phase !== "gap") return;
 
     const idx = scenarioIndexRef.current;
+    const sc = SCENARIOS[idx];
+
+    // TRIAL_END marker: closes the trial, opens the inter-trial interval.
+    pushMarkerRef.current(
+      formatMarker("trial_end", { trial: sc.id, condition: conditionForScenario(sc) }),
+    );
+
     const t = setTimeout(() => {
       if (idx >= SCENARIOS.length - 1) {
         setPhase("summary");
@@ -225,6 +312,24 @@ export default function Home() {
     setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
+  // SESSION_END marker: bookend matching session_start. Pushed once when
+  // the participant reaches the summary screen, regardless of whether the
+  // CSV save below succeeds.
+  const sessionEndPushedRef = useRef(false);
+  useEffect(() => {
+    if (phase !== "summary") return;
+    if (sessionEndPushedRef.current) return;
+    sessionEndPushedRef.current = true;
+    pushMarkerRef.current(formatMarker("session_end"));
+  }, [phase]);
+
+  // Reset the session_end latch when a new run starts.
+  useEffect(() => {
+    if (phase === "consent" || phase === "legend") {
+      sessionEndPushedRef.current = false;
+    }
+  }, [phase]);
+
   useEffect(() => {
     if (phase !== "summary") return;
     if (!runId) return;
@@ -264,6 +369,9 @@ export default function Home() {
         <p className="mt-1 text-xs text-zinc-500">
           First-person ethics at speed — no wrong answers, only tradeoffs.
         </p>
+        {LSL_ENABLED && (
+          <LSLStatusPill status={lslStatus} />
+        )}
       </header>
 
       <main className="flex flex-1 flex-col items-center justify-center px-4 py-8">
@@ -323,9 +431,9 @@ export default function Home() {
                   After the run
                 </p>
                 <p className="mt-1.5">
-                  You’ll complete <span className="font-semibold text-amber-400/95">20</span> scenarios with a short
+                  You’ll complete <span className="font-semibold text-amber-400/95">{TOTAL_SCENARIOS}</span> scenarios with a short
                   outcome after each, then a <span className="font-semibold text-zinc-200">summary</span> of this
-                  session. Progress is shown as you go (scenario number / 20).
+                  session. Progress is shown as you go (scenario number / {TOTAL_SCENARIOS}).
                 </p>
               </div>
               <p className="border-t border-zinc-800 pt-3 text-zinc-400">
@@ -364,25 +472,29 @@ export default function Home() {
             <p className="text-xs font-semibold uppercase tracking-[0.25em] text-zinc-500">
               Quick legend
             </p>
-            <h2 className="text-2xl font-bold text-zinc-50">What the emoticons mean</h2>
+            <h2 className="text-2xl font-bold text-zinc-50">What the crossing figures mean</h2>
+
+            <p className="text-[11px] leading-relaxed text-zinc-400">
+              Crossing figures are transparent PNG sprites (flat vector style). They are shown larger here than in the
+              windshield so you can see detail — in play they scale to the road scene.
+            </p>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-xl border border-zinc-800 bg-black/35 p-4">
                 <p className="mb-2 text-xs font-bold uppercase tracking-wider text-zinc-500">
-                  Age icons (same as gameplay)
+                  Age (same as gameplay)
                 </p>
                 <p className="mb-2 text-[10px] leading-snug text-zinc-500">
-                  Hair style indicates gender (male vs female), matching the scene.
+                  Child, adult, and elder each have their own generated sprite (HUD still shows the text label).
                 </p>
-                <div className="flex items-end justify-between gap-2">
+                <div className="flex flex-wrap items-end justify-center gap-3 sm:gap-4">
                   {LEGEND_PEOPLE.map((p) => (
-                    <div key={`${p.age}-${p.attire}`} className="flex flex-1 flex-col items-center gap-1">
-                      <CartoonPerson
-                        variant={variantForAge(p.age)}
-                        attire={p.attire}
-                        gender={p.gender ?? "male"}
-                        skinTone={p.skinTone ?? "medium"}
-                        className="h-auto w-full max-w-[70px]"
+                    <div key={`${p.age}-${p.attire}`} className="flex flex-col items-center gap-2">
+                      <LegendFigure
+                        src={getHumanSpriteSrc({
+                          role: p.attire,
+                          ageVariant: variantForAge(p.age),
+                        })}
                       />
                       <p className="text-[11px] font-semibold text-zinc-300">
                         {p.label}
@@ -415,20 +527,14 @@ export default function Home() {
               <p className="mb-3 text-xs font-bold uppercase tracking-wider text-zinc-500">
                 Role labels (same HUD text)
               </p>
-              <div className="grid gap-2 sm:grid-cols-3">
-                {LEGEND_ROLES.map((role, idx) => (
+              <div className="grid gap-3 sm:grid-cols-3">
+                {LEGEND_ROLES.map((role) => (
                   <div
                     key={role}
-                    className="rounded-lg border border-zinc-700/70 bg-zinc-900/70 px-2 py-2 text-center"
+                    className="flex flex-col items-center gap-2 rounded-lg border border-zinc-700/70 bg-zinc-900/70 px-2 py-3 text-center"
                   >
-                    <CartoonPerson
-                      variant="adult"
-                      attire={role}
-                      gender={idx % 2 === 0 ? "male" : "female"}
-                      skinTone={LEGEND_SKIN_TONES[idx % LEGEND_SKIN_TONES.length]}
-                      className="mx-auto h-auto w-full max-w-[54px]"
-                    />
-                    <p className="mt-1 text-center text-[11px] font-semibold leading-snug text-zinc-200">
+                    <LegendFigure src={getHumanSpriteSrc({ role, ageVariant: "adult" })} />
+                    <p className="text-center text-[11px] font-semibold leading-snug text-zinc-200">
                       {roleLegendCaption(role)}
                     </p>
                   </div>
@@ -441,20 +547,22 @@ export default function Home() {
                 Pets (same art in the windshield)
               </p>
               <p className="mb-3 text-[10px] leading-snug text-zinc-500">
-                Dogs and cats count as their own crossing figures — same HUD labels as in play.
+                Dog and cat use the same generated flat-vector style as the people.
               </p>
-              <div className="flex flex-wrap items-end justify-center gap-10">
-                <div className="flex flex-col items-center gap-1">
-                  <CartoonPet
-                    species="dog"
-                    className="h-auto w-full max-w-[58px] drop-shadow-[0_4px_6px_rgba(0,0,0,0.45)]"
+              <div className="flex flex-wrap items-end justify-center gap-8 sm:gap-12">
+                <div className="flex flex-col items-center gap-2">
+                  <LegendFigure
+                    wide
+                    src={getPetSpriteSrc("dog")}
+                    imgClassName="drop-shadow-[0_4px_8px_rgba(0,0,0,0.4)]"
                   />
                   <p className="text-[11px] font-semibold text-zinc-200">Dog</p>
                 </div>
-                <div className="flex flex-col items-center gap-1">
-                  <CartoonPet
-                    species="cat"
-                    className="h-auto w-full max-w-[58px] drop-shadow-[0_4px_6px_rgba(0,0,0,0.45)]"
+                <div className="flex flex-col items-center gap-2">
+                  <LegendFigure
+                    wide
+                    src={getPetSpriteSrc("cat")}
+                    imgClassName="drop-shadow-[0_4px_8px_rgba(0,0,0,0.4)]"
                   />
                   <p className="text-[11px] font-semibold text-zinc-200">Cat</p>
                 </div>
@@ -504,10 +612,6 @@ export default function Home() {
           <ResultScreen
             choiceLabel={lastOutcome.label}
             explanation={lastOutcome.explanation}
-            reactionMs={lastOutcome.reactionMs}
-            stats={stats}
-            statsLoading={statsLoading}
-            statsError={statsError}
           />
         )}
 
@@ -516,7 +620,7 @@ export default function Home() {
             <p className="text-xs font-semibold uppercase tracking-[0.25em] text-zinc-500">
               Run complete
             </p>
-            <h2 className="text-2xl font-bold">20 scenarios cleared</h2>
+            <h2 className="text-2xl font-bold">{TOTAL_SCENARIOS} scenarios cleared</h2>
             <p className="text-sm text-zinc-400">
               Logged {decisions.length} decisions for this run.
             </p>
