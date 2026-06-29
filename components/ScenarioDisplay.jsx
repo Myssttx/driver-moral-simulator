@@ -91,9 +91,8 @@ export default function ScenarioDisplay({ scenario, showCrosswalk = true }) {
       {showCrosswalk && <CrosswalkVista scenario={scenario} />}
 
       <p className="mx-auto max-w-xl text-center text-[10px] leading-relaxed text-zinc-500">
-        <span className="font-semibold text-zinc-400">Roles:</span>         dark suit + red tie · teal scrubs +
-        stethoscope · neon vest + silver bands · hoodie + backpack · jersey + number · citizen (plain clothes) ·
-        cartoon dog / cat pets.
+        <span className="font-semibold text-zinc-400">Figures:</span> transparent flat-vector PNG sprites. Roles
+        match HUD labels.
         <span className="mt-1 block text-zinc-600">
           <span className="text-emerald-400/90">Green</span> = legal crosswalk ·{" "}
           <span className="text-orange-400/90">Orange dashed</span> = jaywalking.

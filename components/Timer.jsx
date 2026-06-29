@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { SCENARIO_TIMEOUT_S } from "@/lib/runConfig";
 
-const DURATION = 15;
+const DURATION = SCENARIO_TIMEOUT_S;
 
 export default function Timer({ active, onExpire, scenarioKey }) {
   const [remaining, setRemaining] = useState(DURATION);

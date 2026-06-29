@@ -1,21 +1,19 @@
 "use client";
 
 import { createPortal } from "react-dom";
-import CartoonPerson from "./CartoonPerson";
-import CartoonPet from "./CartoonPet";
+import RasterSprite from "./RasterSprite";
 import SceneBackdrop from "./SceneBackdrop";
 import { useCockpitLabelLayer } from "@/components/CockpitLabelLayerContext";
 import { VS } from "@/lib/vectorSceneTheme";
 import { variantForAge } from "@/lib/ageIcons";
 import {
-  gendersForGroup,
   isPetKind,
   kindsForGroup,
   petHudLabel,
   ROLE_SHORT,
   rolesForGroup,
-  skinTonesForGroup,
 } from "@/lib/roles";
+import { getHumanSpriteSrc, getPetSpriteSrc } from "@/lib/referenceSprites";
 
 /** One side’s people in a single horizontal row — no stacking / wrap. */
 function CrosswalkHalf({
@@ -33,20 +31,18 @@ function CrosswalkHalf({
   const { ages, legal } = group;
   const roles = rolesForGroup(group);
   const kinds = kindsForGroup(group);
-  const genders = gendersForGroup(group);
-  const skinTones = skinTonesForGroup(group);
-
   const zoneClass = legal
     ? "border-2 border-solid border-emerald-600/60 bg-emerald-500/10 ring-1 ring-emerald-500/25"
     : "border-2 border-dashed border-orange-500 bg-orange-400/12 ring-2 ring-orange-400/40 [background-image:repeating-linear-gradient(135deg,transparent,transparent_6px,rgba(251,146,60,0.12)_6px,rgba(251,146,60,0.12)_12px)]";
 
   const personBox =
-    "crosswalk-bob-anim relative flex min-w-0 flex-1 flex-col items-center justify-end";
+    "relative flex min-w-0 flex-1 flex-col items-center justify-end";
 
   const hudOn =
     showHudLabels !== undefined ? showHudLabels : embedded;
-  const placeholderH =
-    embedded ? "min-h-[4.65rem] sm:min-h-[5.35rem]" : "min-h-[5.1rem] sm:min-h-[6rem]";
+  const placeholderH = embedded
+    ? "min-h-[3.75rem] sm:min-h-[4.5rem]"
+    : "min-h-[4.5rem] sm:min-h-[5.25rem]";
 
   return (
     <div
@@ -90,35 +86,38 @@ function CrosswalkHalf({
               : ageLabel;
           const tipPet = pet ? petHudLabel(kind) : `Age ${age}${roleShort ? ` · ${roleShort}` : ""}`;
           const elderPill = !pet && ageVar === "elder";
+          /** Tall PNGs were only width-capped and overflowed the windshield; bound both axes. */
+          const figureSlot =
+            pet
+              ? embedded
+                ? "mx-auto flex h-[3.75rem] w-full max-w-[58px] items-end justify-center sm:h-[4.5rem] sm:max-w-[68px]"
+                : "mx-auto flex h-[4.5rem] w-full max-w-[64px] items-end justify-center sm:h-[5.25rem] sm:max-w-[76px]"
+              : embedded
+                ? "mx-auto flex h-[3.75rem] w-full max-w-[44px] items-end justify-center sm:h-[4.5rem] sm:max-w-[52px]"
+                : "mx-auto flex h-[4.5rem] w-full max-w-[50px] items-end justify-center sm:h-[5.25rem] sm:max-w-[58px]";
           return (
             <div
               key={`${side}-${i}`}
               className={personBox}
-              style={{ animationDelay: `${i * 0.1}s` }}
               title={`${tipPet} · ${legal ? "legal" : "jaywalking"}`}
             >
-              <div
-                className={`w-full ${
-                  embedded ? "max-w-[62px] sm:max-w-[78px]" : "max-w-[66px] sm:max-w-[82px]"
-                }`}
-              >
+              <div className={figureSlot}>
                 {figureMode === "placeholder" ? (
                   <div
                     className={`mx-auto w-full ${placeholderH} shrink-0`}
                     aria-hidden
                   />
                 ) : pet ? (
-                  <CartoonPet
-                    species={kind}
-                    className="h-auto w-full drop-shadow-[0_4px_6px_rgba(0,0,0,0.55)]"
+                  <RasterSprite
+                    src={getPetSpriteSrc(kind)}
+                    title={tipPet}
+                    className="drop-shadow-[0_4px_6px_rgba(0,0,0,0.55)]"
                   />
                 ) : (
-                  <CartoonPerson
-                    variant={ageVar}
-                    attire={roles[i]}
-                    gender={genders[i]}
-                    skinTone={skinTones[i]}
-                    className="h-auto w-full drop-shadow-[0_4px_6px_rgba(0,0,0,0.55)]"
+                  <RasterSprite
+                    src={getHumanSpriteSrc({ role: roles[i], ageVariant: ageVar })}
+                    title={tipPet}
+                    className="drop-shadow-[0_4px_6px_rgba(0,0,0,0.55)]"
                   />
                 )}
               </div>
@@ -145,7 +144,7 @@ function CrosswalkHalf({
 function WindshieldHudMirror({ scenario, mountNode }) {
   return createPortal(
     <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden">
-      <div className="relative z-[2] mx-auto flex min-h-0 w-full max-w-full flex-1 flex-col px-1 pb-0 pt-3 sm:px-2 sm:pt-5 min-h-[130px]">
+      <div className="relative z-[2] mx-auto flex min-h-0 w-full max-w-full flex-1 flex-col px-1 pb-0 pt-3 sm:px-2 sm:pt-5 min-h-[128px]">
         <div className="shrink-0" style={{ perspective: "520px" }}>
           <div
             className="relative origin-bottom"
@@ -165,7 +164,7 @@ function WindshieldHudMirror({ scenario, mountNode }) {
           </div>
         </div>
 
-        <div className="relative z-[12] mx-0.5 grid min-h-0 w-full min-w-0 flex-1 grid-rows-[1fr_auto] min-h-[104px] sm:mx-1">
+        <div className="relative z-[12] mx-0.5 grid min-h-0 w-full min-w-0 flex-1 grid-rows-[1fr_auto] min-h-[100px] sm:mx-1">
           <div className="relative z-10 flex min-h-0 w-full items-end gap-1 px-0.5 pb-1 sm:gap-2 sm:px-1">
             <div className="relative min-w-0 flex-1 rounded-lg">
               <CrosswalkHalf
@@ -266,7 +265,7 @@ export default function CrosswalkVista({
       {/* Road + crosswalk: grid row 2 is the literal strip people stand on */}
       <div
         className={`relative z-[2] mx-auto flex min-h-0 w-full max-w-full flex-1 flex-col px-1 pb-0 pt-3 sm:px-2 sm:pt-5 ${
-          embedded ? "min-h-[130px]" : "min-h-[200px] sm:min-h-[260px]"
+          embedded ? "min-h-[128px]" : "min-h-[200px] sm:min-h-[252px]"
         }`}
       >
         <div className="shrink-0" style={{ perspective: "520px" }}>
@@ -364,7 +363,7 @@ export default function CrosswalkVista({
 
         <div
           className={`relative z-[12] mx-0.5 grid min-h-0 w-full min-w-0 flex-1 grid-rows-[1fr_auto] sm:mx-1 ${
-            embedded ? "min-h-[104px]" : "min-h-[140px]"
+            embedded ? "min-h-[104px]" : "min-h-[148px]"
           }`}
         >
           <div
