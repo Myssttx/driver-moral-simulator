@@ -1,5 +1,43 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
 
+## Split-or-Steal LSL dashboard
+
+The protocol marker dashboard is available at:
+
+```bash
+http://localhost:3000/split-or-steal
+```
+
+For EmotivPRO recordings, start the local LSL bridge before the session:
+
+```bash
+python3 -m pip install -r python/requirements.txt
+python3 python/marker_bridge.py
+```
+
+EmotivPRO should discover the marker outlet named `SplitOrStealProtocolMarkers`.
+The dashboard sends pipe-delimited string markers for consent, surveys,
+equipment setup, baseline, every Split-or-Steal round event, serial sevens,
+trolley task boundaries, equipment removal, post-survey, debrief, and session
+bookends. Use the dashboard CSV export as the operator-side marker log.
+
+To also get an independent, portable marker log (in case the dashboard export
+isn't available, or as a cross-check), run the session logger alongside the
+bridge. It detects every marker on the `SplitOrStealProtocolMarkers` stream in
+real time and writes it, with its LSL timestamp, to CSV — it never records
+raw EEG (EmotivPRO stays the authoritative recorder for that):
+
+```bash
+python3 python/session_logger.py
+# writes to python/sessions/session_<UTC timestamp>.csv by default
+```
+
+It fails loudly (no CSV written) if the marker bridge isn't already running.
+Add `--monitor-eeg` to also print live per-channel min/max sanity stats
+from the EEG LSL stream (never saved to disk) — useful to confirm the
+headset is actually streaming before starting a real session. Run
+`python3 python/session_logger.py --help` for all options.
+
 ## Getting Started
 
 First, run the development server:
