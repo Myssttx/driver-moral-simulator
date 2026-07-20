@@ -35,12 +35,17 @@ export const SCENARIOS = [
   {
     id: 2,
     left: {
-      count: 3,
-      ages: [28, 34, 42],
+      count: 2,
+      ages: [28, 42],
       legal: true,
-      roles: ["casual", "casual", "casual"],
+      roles: ["casual", "casual"],
     },
-    right: { count: 1, ages: [33], legal: true, roles: ["casual"] },
+    right: {
+      count: 4,
+      ages: [30, 34, 36, 40],
+      legal: true,
+      roles: ["casual", "casual", "casual", "casual"],
+    },
   },
   {
     id: 3,
