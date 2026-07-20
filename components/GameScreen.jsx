@@ -9,6 +9,7 @@ import { TOTAL_SCENARIOS } from "@/lib/runConfig";
 export default function GameScreen({
   scenario,
   scenarioKey,
+  roundIndex,
   playing,
   onChooseLeft,
   onChooseRight,
@@ -19,7 +20,7 @@ export default function GameScreen({
       <div className="relative w-full overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-950 shadow-2xl ring-1 ring-white/5">
         <div className="relative z-20 flex flex-col gap-2 px-4 pb-2 pt-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-            Scenario {scenario.id} / {TOTAL_SCENARIOS}
+            Scenario {roundIndex} / {TOTAL_SCENARIOS}
           </p>
           <Timer
             active={playing}

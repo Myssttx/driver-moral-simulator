@@ -1,8 +1,8 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "Split-or-Steal Protocol Tools",
-  description: "LSL marker dashboard and decision tasks for EEG sessions.",
+  title: "Driver Moral Simulator",
+  description: "Standardized driver moral decision task for EEG sessions.",
 };
 
 export default function RootLayout({ children }) {

@@ -1,4 +1,26 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# Driver Moral Simulator
+
+This repository contains two separate browser tools:
+
+- Participant task: `http://localhost:3000`
+- Operator marker dashboard: `http://localhost:3000/split-or-steal`
+
+The participant task does not link to the operator dashboard. Operators should
+open `/split-or-steal` directly in a separate browser tab or window when they
+need manual protocol markers.
+
+## Standardized participant run
+
+Every participant receives the same scenario sequence. The canonical order is
+defined in `data/runOrder.js` as scenario IDs 1 through 20, and the app consumes
+`ORDERED_SCENARIOS` instead of shuffling or sampling from the scenario bank.
+
+Difficulty increases in four fixed blocks of five rounds:
+
+- Rounds 1-5: baseline count tradeoffs
+- Rounds 6-10: legality and age variables
+- Rounds 11-15: roles and pets with tighter counts
+- Rounds 16-20: maximum dilemma cases
 
 ## Split-or-Steal LSL dashboard
 

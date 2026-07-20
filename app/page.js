@@ -5,7 +5,7 @@ import GameScreen from "@/components/GameScreen";
 import ResultScreen from "@/components/ResultScreen";
 import LegendFigure from "@/components/LegendFigure";
 import RasterSprite from "@/components/RasterSprite";
-import { SCENARIOS } from "@/data/scenarios";
+import { ORDERED_SCENARIOS } from "@/data/runOrder";
 import { variantForAge } from "@/lib/ageIcons";
 import { roleLegendCaption } from "@/lib/roles";
 import { getHumanSpriteSrc, getPetSpriteSrc } from "@/lib/referenceSprites";
@@ -22,15 +22,15 @@ import {
 const LSL_ENABLED =
   (process.env.NEXT_PUBLIC_LSL_ENABLED ?? "true").toLowerCase() !== "false";
 
-// LAB DECISION: condition label per scenario, used in marker labels and
-// for downstream epoch grouping. Mirrors the 4-tier difficulty structure
-// documented at the top of data/scenarios.js (5 scenarios per set).
+// LAB DECISION: condition label per round, used in marker labels and
+// for downstream epoch grouping. Mirrors the fixed 4-tier difficulty
+// structure documented at the top of data/scenarios.js (5 scenarios per set).
 //   set1_baseline       — pure count asymmetry, all legal adults
 //   set2_legality_age   — jaywalking + child/elder introduced
 //   set3_roles_pets     — counts tight, qualitative weighting
 //   set4_max_dilemma    — equal counts, every variable active
-function conditionForScenario(scenario) {
-  const tier = Math.ceil(scenario.id / 5);
+function conditionForRoundIndex(roundIndexZeroBased) {
+  const tier = Math.floor(roundIndexZeroBased / 5) + 1;
   switch (tier) {
     case 1: return "set1_baseline";
     case 2: return "set2_legality_age";
@@ -107,7 +107,7 @@ export default function Home() {
   const decidedRef = useRef(false);
   const diskLoggedRef = useRef(false);
 
-  const scenario = SCENARIOS[scenarioIndex];
+  const scenario = ORDERED_SCENARIOS[scenarioIndex];
 
   // LSL marker stream. `pushMarker(label)` synchronously enqueues a frame
   // on the WebSocket to python/marker_bridge.py, which immediately calls
@@ -131,7 +131,7 @@ export default function Home() {
     decidedRef.current = true;
 
     const idx = scenarioIndexRef.current;
-    const sc = SCENARIOS[idx];
+    const sc = ORDERED_SCENARIOS[idx];
 
     // CHOICE marker: response-locked event for ERP analysis. Push BEFORE
     // any state updates so the LSL timestamp reflects the moment the
@@ -139,7 +139,7 @@ export default function Home() {
     pushMarkerRef.current(
       formatMarker("choice", {
         trial: sc.id,
-        condition: conditionForScenario(sc),
+        condition: conditionForRoundIndex(idx),
         side: choice, // "left" | "right" | "timeout"
         rt_ms: Math.round(reactionMs),
       }),
@@ -187,8 +187,9 @@ export default function Home() {
     decidedRef.current = false;
     scenarioStartRef.current = Date.now();
 
-    const sc = SCENARIOS[scenarioIndexRef.current];
-    const cond = conditionForScenario(sc);
+    const idx = scenarioIndexRef.current;
+    const sc = ORDERED_SCENARIOS[idx];
+    const cond = conditionForRoundIndex(idx);
 
     // TRIAL_START marker: trial bookend. Fired one render tick before the
     // scene is fully painted.
@@ -240,7 +241,7 @@ export default function Home() {
       pushMarkerRef.current(
         formatMarker("outcome_shown", {
           trial: sc.id,
-          condition: conditionForScenario(sc),
+          condition: conditionForRoundIndex(scenarioIndexRef.current),
         }),
       );
     }
@@ -253,15 +254,15 @@ export default function Home() {
     if (phase !== "gap") return;
 
     const idx = scenarioIndexRef.current;
-    const sc = SCENARIOS[idx];
+    const sc = ORDERED_SCENARIOS[idx];
 
     // TRIAL_END marker: closes the trial, opens the inter-trial interval.
     pushMarkerRef.current(
-      formatMarker("trial_end", { trial: sc.id, condition: conditionForScenario(sc) }),
+      formatMarker("trial_end", { trial: sc.id, condition: conditionForRoundIndex(idx) }),
     );
 
     const t = setTimeout(() => {
-      if (idx >= SCENARIOS.length - 1) {
+      if (idx >= ORDERED_SCENARIOS.length - 1) {
         setPhase("summary");
       } else {
         setScenarioIndex(idx + 1);
@@ -391,14 +392,6 @@ export default function Home() {
         {LSL_ENABLED && (
           <LSLStatusPill status={lslStatus} />
         )}
-        <div className="mt-3">
-          <a
-            href="/split-or-steal"
-            className="inline-flex rounded-md border border-cyan-700 bg-cyan-950/50 px-3 py-1.5 text-xs font-semibold text-cyan-100 transition hover:border-cyan-400"
-          >
-            Split-or-Steal marker dashboard
-          </a>
-        </div>
       </header>
 
       <main className="flex flex-1 flex-col items-center justify-center px-4 py-8">
@@ -619,6 +612,7 @@ export default function Home() {
           <GameScreen
             scenario={scenario}
             scenarioKey={scenario.id}
+            roundIndex={scenarioIndex + 1}
             playing={playing}
             onChooseLeft={handleChooseLeft}
             onChooseRight={handleChooseRight}
