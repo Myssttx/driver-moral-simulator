@@ -106,7 +106,6 @@ export default function Home() {
   const scenarioIndexRef = useRef(0);
   const decidedRef = useRef(false);
   const diskLoggedRef = useRef(false);
-  scenarioIndexRef.current = scenarioIndex;
 
   const scenario = SCENARIOS[scenarioIndex];
 
@@ -118,7 +117,14 @@ export default function Home() {
   const { pushMarker, status: lslStatus } = useLSLMarkers({ enabled: LSL_ENABLED });
   // Keep a stable ref so effect dependency arrays don't capture stale closures.
   const pushMarkerRef = useRef(pushMarker);
-  pushMarkerRef.current = pushMarker;
+
+  useEffect(() => {
+    scenarioIndexRef.current = scenarioIndex;
+  }, [scenarioIndex]);
+
+  useEffect(() => {
+    pushMarkerRef.current = pushMarker;
+  }, [pushMarker]);
 
   const recordDecision = useCallback((choice, reactionMs) => {
     if (decidedRef.current) return;
@@ -200,7 +206,8 @@ export default function Home() {
       formatMarker("scenario_onset", { trial: sc.id, condition: cond }),
     );
 
-    setPlaying(true);
+    const readyTimer = setTimeout(() => setPlaying(true), 0);
+    return () => clearTimeout(readyTimer);
   }, [phase, scenarioIndex]);
 
   const handleChooseLeft = useCallback(() => {
@@ -240,7 +247,7 @@ export default function Home() {
 
     const t1 = setTimeout(() => setPhase("gap"), RESULT_VISIBLE_MS);
     return () => clearTimeout(t1);
-  }, [phase, lastOutcome?.scenario?.id]);
+  }, [phase, lastOutcome?.scenario]);
 
   useEffect(() => {
     if (phase !== "gap") return;
@@ -337,8 +344,12 @@ export default function Home() {
     if (diskLoggedRef.current) return;
 
     diskLoggedRef.current = true;
-    setDiskLogStatus("saving");
-    setDiskLogError(null);
+    let ignore = false;
+    const statusTimer = setTimeout(() => {
+      if (ignore) return;
+      setDiskLogStatus("saving");
+      setDiskLogError(null);
+    }, 0);
 
     fetch("/api/decisions-log", {
       method: "POST",
@@ -353,12 +364,20 @@ export default function Home() {
         if (!r.ok) throw new Error("Failed to write CSV.");
         return r.json();
       })
-      .then(() => setDiskLogStatus("saved"))
+      .then(() => {
+        if (!ignore) setDiskLogStatus("saved");
+      })
       .catch((e) => {
+        if (ignore) return;
         setDiskLogStatus("error");
         setDiskLogError(e?.message ?? "Failed to write CSV.");
       });
-  }, [phase, runId, runStartedAt, decisions.length]);
+
+    return () => {
+      ignore = true;
+      clearTimeout(statusTimer);
+    };
+  }, [phase, runId, runStartedAt, decisions]);
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-950 text-zinc-100">
@@ -372,6 +391,14 @@ export default function Home() {
         {LSL_ENABLED && (
           <LSLStatusPill status={lslStatus} />
         )}
+        <div className="mt-3">
+          <a
+            href="/split-or-steal"
+            className="inline-flex rounded-md border border-cyan-700 bg-cyan-950/50 px-3 py-1.5 text-xs font-semibold text-cyan-100 transition hover:border-cyan-400"
+          >
+            Split-or-Steal marker dashboard
+          </a>
+        </div>
       </header>
 
       <main className="flex flex-1 flex-col items-center justify-center px-4 py-8">

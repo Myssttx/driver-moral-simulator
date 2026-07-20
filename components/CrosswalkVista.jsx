@@ -223,9 +223,9 @@ export default function CrosswalkVista({
   onChooseRight,
   choicesDisabled = false,
 }) {
+  const cockpitLabelLayer = useCockpitLabelLayer();
   if (!scenario) return null;
 
-  const cockpitLabelLayer = useCockpitLabelLayer();
   const portaledHud = embedded && Boolean(cockpitLabelLayer);
 
   const rootClass = embedded

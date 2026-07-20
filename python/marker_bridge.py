@@ -1,15 +1,15 @@
-"""LSL marker bridge for the browser-based Moral Machine game.
+"""LSL marker bridge for browser-based protocol marker tools.
 
 Why this exists
 ---------------
-The game is a Next.js / React app running in a browser, and browsers cannot
+The dashboard is a Next.js / React app running in a browser, and browsers cannot
 publish on Lab Streaming Layer (no native UDP/multicast). This script is a
 tiny localhost WebSocket server that:
 
-  1. Owns a single `pylsl.StreamOutlet` named ``MoralMachineMarkers`` that
+  1. Owns a single `pylsl.StreamOutlet` named ``SplitOrStealProtocolMarkers`` that
      EmotivPRO will discover on the LAN and record alongside the EEG.
-  2. Accepts WebSocket connections from the game.
-  3. For every text frame received from the game, immediately calls
+  2. Accepts WebSocket connections from the browser.
+  3. For every text frame received from the browser, immediately calls
      ``outlet.push_sample([label])``. The sample carries an automatic
      ``pylsl.local_clock()`` timestamp, which is what EmotivPRO uses to
      align the marker to the EEG sample stream.
@@ -24,9 +24,8 @@ Launch order for a session
 --------------------------
   1. Start EmotivPRO, begin a recording, confirm the LSL inlet is armed.
   2. Start this bridge:        python python/marker_bridge.py
-  3. Start the game (npm run dev) and open it in the browser.
-  4. Start the Python session logger (session_logger.py) for the CSV
-     cross-check and pre-flight validation.
+  3. Start the dashboard (npm run dev) and open it in the browser.
+  4. Use the dashboard marker log CSV as an operator-side cross-check.
 
 The bridge logs every marker it pushes to stdout, so the operator can
 eyeball that markers are firing in real time during the session.
@@ -65,10 +64,10 @@ except ImportError as exc:  # pragma: no cover
 # them in ONE place only.
 # ---------------------------------------------------------------------------
 
-# LSL outlet identity. Discovered by EmotivPRO and by session_logger.py.
-STREAM_NAME = "MoralMachineMarkers"
+# LSL outlet identity. Discovered by EmotivPRO.
+STREAM_NAME = "SplitOrStealProtocolMarkers"
 STREAM_TYPE = "Markers"
-STREAM_SOURCE_ID = "moral-machine-bridge-v1"  # fixed so restarts reconnect cleanly
+STREAM_SOURCE_ID = "split-or-steal-protocol-bridge-v1"  # fixed so restarts reconnect cleanly
 STREAM_CHANNEL_FORMAT = pylsl.cf_string
 STREAM_CHANNEL_COUNT = 1
 STREAM_NOMINAL_SRATE = pylsl.IRREGULAR_RATE  # markers are event-driven
@@ -112,7 +111,7 @@ def build_outlet() -> pylsl.StreamOutlet:
     # inspector knows where this stream came from.
     desc = info.desc()
     desc.append_child_value("manufacturer", "McMahan Lab")
-    desc.append_child_value("software", "driver-moral-simulator/marker_bridge.py")
+    desc.append_child_value("software", "split-or-steal-protocol/marker_bridge.py")
     desc.append_child_value("schema", "event_type|trial=NN|condition=XXX|...")
     return pylsl.StreamOutlet(info)
 

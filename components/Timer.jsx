@@ -9,11 +9,15 @@ export default function Timer({ active, onExpire, scenarioKey }) {
   const [remaining, setRemaining] = useState(DURATION);
   const expiredRef = useRef(false);
   const onExpireRef = useRef(onExpire);
-  onExpireRef.current = onExpire;
+
+  useEffect(() => {
+    onExpireRef.current = onExpire;
+  }, [onExpire]);
 
   useEffect(() => {
     expiredRef.current = false;
-    setRemaining(DURATION);
+    const resetTimer = setTimeout(() => setRemaining(DURATION), 0);
+    return () => clearTimeout(resetTimer);
   }, [scenarioKey, active]);
 
   useEffect(() => {
