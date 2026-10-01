@@ -16,11 +16,13 @@ import {
   TOTAL_SCENARIOS,
 } from "@/lib/runConfig";
 
-// LAB DECISION: the EEG bridge is on by default. To run the game without
-// trying to reach the LSL marker bridge (e.g. demo / dev on a laptop with
-// no headset), launch with NEXT_PUBLIC_LSL_ENABLED=false.
+// LAB DECISION: the EEG marker bridge is on by default. The legacy environment
+// variable name is retained for compatibility even though the bridge now owns
+// serial, audit CSV, and optional LSL outputs.
 const LSL_ENABLED =
   (process.env.NEXT_PUBLIC_LSL_ENABLED ?? "true").toLowerCase() !== "false";
+const REQUIRE_SERIAL =
+  (process.env.NEXT_PUBLIC_REQUIRE_SERIAL ?? "true").toLowerCase() !== "false";
 
 // LAB DECISION: condition label per round, used in marker labels and
 // for downstream epoch grouping. Mirrors the fixed 4-tier difficulty
@@ -70,18 +72,29 @@ function choiceLabel(choice) {
 }
 
 /**
- * Tiny operator-facing pill that shows whether the LSL marker bridge is
- * reachable. Visible to whoever is running the session — NOT participant-
- * facing diagnostic data. Color-coded so a glance is enough to know
- * whether a session would record markers right now.
+ * Operator-facing bridge/serial preflight. A green state means the Python
+ * process opened the configured sender port; it does not claim EmotivPRO has
+ * recorded a byte. Export verification remains the receipt check.
  */
-function LSLStatusPill({ status }) {
-  const tone = {
-    open: { dot: "bg-emerald-400", text: "text-emerald-300", label: "LSL bridge connected" },
-    connecting: { dot: "bg-amber-400 animate-pulse", text: "text-amber-300", label: "LSL bridge connecting…" },
-    closed: { dot: "bg-red-500", text: "text-red-300", label: "LSL bridge DOWN — markers not recording" },
-    disabled: { dot: "bg-zinc-600", text: "text-zinc-400", label: "LSL bridge disabled (dev mode)" },
-  }[status] ?? { dot: "bg-zinc-600", text: "text-zinc-400", label: `LSL ${status}` };
+function MarkerStatusPill({ status, bridgeInfo, lastError }) {
+  const serial = bridgeInfo?.serial;
+  let tone;
+  if (lastError) {
+    tone = { dot: "bg-red-500", text: "text-red-300", label: lastError };
+  } else if (status === "open" && serial?.mode === "hardware" && serial?.ready) {
+    tone = { dot: "bg-emerald-400", text: "text-emerald-300", label: `Serial ready: ${serial.port}` };
+  } else if (status === "open" && serial?.mode === "simulation") {
+    tone = { dot: "bg-amber-400", text: "text-amber-300", label: "Serial simulation — no EmotivPRO bytes" };
+  } else if (status === "open") {
+    tone = { dot: "bg-cyan-400", text: "text-cyan-300", label: "Bridge ready; serial output is off" };
+  } else {
+    tone = {
+      connecting: { dot: "bg-amber-400 animate-pulse", text: "text-amber-300", label: "Marker bridge connecting…" },
+      handshaking: { dot: "bg-amber-400 animate-pulse", text: "text-amber-300", label: "Checking marker bridge…" },
+      closed: { dot: "bg-red-500", text: "text-red-300", label: "Marker bridge DOWN — run blocked" },
+      disabled: { dot: "bg-zinc-600", text: "text-zinc-400", label: "Marker bridge disabled (dev mode)" },
+    }[status] ?? { dot: "bg-zinc-600", text: "text-zinc-400", label: `Marker bridge: ${status}` };
+  }
   return (
     <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-black/40 px-3 py-1 text-[11px] font-semibold">
       <span className={`inline-block h-2 w-2 rounded-full ${tone.dot}`} />
@@ -106,15 +119,29 @@ export default function Home() {
   const scenarioIndexRef = useRef(0);
   const decidedRef = useRef(false);
   const diskLoggedRef = useRef(false);
+  const runIdRef = useRef(null);
 
   const scenario = ORDERED_SCENARIOS[scenarioIndex];
 
-  // LSL marker stream. `pushMarker(label)` synchronously enqueues a frame
-  // on the WebSocket to python/marker_bridge.py, which immediately calls
-  // pylsl push_sample() — the same LSL clock EmotivPRO uses for sync.
-  // NEVER replace this with Date.now() or performance.now(): the recording
-  // alignment depends on LSL stamping the sample at the bridge.
-  const { pushMarker, status: lslStatus } = useLSLMarkers({ enabled: LSL_ENABLED });
+  // One bridge call fans out to serial (raw uint8), the optional rich LSL
+  // stream, and the append-only bridge CSV. The source is part of routing so
+  // similarly named dashboard events cannot inject participant-task codes.
+  const {
+    pushMarker,
+    status: markerStatus,
+    bridgeInfo,
+    lastError: markerError,
+  } = useLSLMarkers({
+    enabled: LSL_ENABLED,
+    source: "driver_moral_simulator",
+  });
+  const serialReady = Boolean(
+    bridgeInfo?.serial?.ready &&
+      ["hardware", "simulation"].includes(bridgeInfo?.serial?.mode),
+  );
+  const markerReady =
+    !LSL_ENABLED ||
+    (markerStatus === "open" && !markerError && (!REQUIRE_SERIAL || serialReady));
   // Keep a stable ref so effect dependency arrays don't capture stale closures.
   const pushMarkerRef = useRef(pushMarker);
 
@@ -134,10 +161,11 @@ export default function Home() {
     const sc = ORDERED_SCENARIOS[idx];
 
     // CHOICE marker: response-locked event for ERP analysis. Push BEFORE
-    // any state updates so the LSL timestamp reflects the moment the
-    // participant's keypress / click was received, not the React commit.
+    // any state updates so the bridge receive/serial timestamps reflect the
+    // participant's keypress or click, not a later React commit.
     pushMarkerRef.current(
       formatMarker("choice", {
+        session: runIdRef.current,
         trial: sc.id,
         condition: conditionForRoundIndex(idx),
         side: choice, // "left" | "right" | "timeout"
@@ -163,8 +191,19 @@ export default function Home() {
   }, []);
 
   const startRun = () => {
+    if (!markerReady) return;
     const now = Date.now();
-    setRunId(`run_${now}`);
+    const nextRunId = `run_${now}`;
+    runIdRef.current = nextRunId;
+    if (
+      LSL_ENABLED &&
+      !pushMarkerRef.current(formatMarker("session_start", { session: nextRunId }))
+    ) {
+      runIdRef.current = null;
+      return;
+    }
+
+    setRunId(nextRunId);
     setRunStartedAt(new Date(now).toISOString());
     diskLoggedRef.current = false;
     setDiskLogStatus("idle");
@@ -173,11 +212,6 @@ export default function Home() {
     setDecisions([]);
     setScenarioIndex(0);
     setLastOutcome(null);
-
-    // SESSION_START marker: the bookend for all trial markers in this
-    // recording. The session_logger.py CSV uses this as the t=0 reference
-    // for relative offsets in QA reports.
-    pushMarkerRef.current(formatMarker("session_start"));
 
     setPhase("playing");
   };
@@ -194,17 +228,22 @@ export default function Home() {
     // TRIAL_START marker: trial bookend. Fired one render tick before the
     // scene is fully painted.
     pushMarkerRef.current(
-      formatMarker("trial_start", { trial: sc.id, condition: cond }),
+      formatMarker("trial_start", {
+        session: runIdRef.current,
+        trial: sc.id,
+        condition: cond,
+      }),
     );
 
-    // SCENARIO_ONSET marker: the primary STIMULUS-LOCKED event for ERP
-    // analysis. This effect runs after React commits but before the
-    // browser paints — close enough that the LSL stamp is within one
-    // frame of the participant seeing the scenario. If sub-frame
-    // precision becomes a research requirement, move this push into a
-    // useLayoutEffect inside GameScreen keyed on scenarioKey.
+    // SCENARIO_ONSET marker: the primary STIMULUS-LOCKED software event for
+    // ERP analysis. React effects run after commit and are not a photodiode;
+    // validate display timing separately if sub-frame onset precision matters.
     pushMarkerRef.current(
-      formatMarker("scenario_onset", { trial: sc.id, condition: cond }),
+      formatMarker("scenario_onset", {
+        session: runIdRef.current,
+        trial: sc.id,
+        condition: cond,
+      }),
     );
 
     const readyTimer = setTimeout(() => setPlaying(true), 0);
@@ -240,6 +279,7 @@ export default function Home() {
     if (sc) {
       pushMarkerRef.current(
         formatMarker("outcome_shown", {
+          session: runIdRef.current,
           trial: sc.id,
           condition: conditionForRoundIndex(scenarioIndexRef.current),
         }),
@@ -258,7 +298,11 @@ export default function Home() {
 
     // TRIAL_END marker: closes the trial, opens the inter-trial interval.
     pushMarkerRef.current(
-      formatMarker("trial_end", { trial: sc.id, condition: conditionForRoundIndex(idx) }),
+      formatMarker("trial_end", {
+        session: runIdRef.current,
+        trial: sc.id,
+        condition: conditionForRoundIndex(idx),
+      }),
     );
 
     const t = setTimeout(() => {
@@ -300,6 +344,7 @@ export default function Home() {
     setPlaying(false);
     setConsentChecked(false);
     setRunId(null);
+    runIdRef.current = null;
     setRunStartedAt(null);
     diskLoggedRef.current = false;
     setDiskLogStatus("idle");
@@ -328,7 +373,9 @@ export default function Home() {
     if (phase !== "summary") return;
     if (sessionEndPushedRef.current) return;
     sessionEndPushedRef.current = true;
-    pushMarkerRef.current(formatMarker("session_end"));
+    pushMarkerRef.current(
+      formatMarker("session_end", { session: runIdRef.current }),
+    );
   }, [phase]);
 
   // Reset the session_end latch when a new run starts.
@@ -390,7 +437,11 @@ export default function Home() {
           First-person ethics at speed — no wrong answers, only tradeoffs.
         </p>
         {LSL_ENABLED && (
-          <LSLStatusPill status={lslStatus} />
+          <MarkerStatusPill
+            status={markerStatus}
+            bridgeInfo={bridgeInfo}
+            lastError={markerError}
+          />
         )}
       </header>
 
@@ -600,11 +651,17 @@ export default function Home() {
               <button
                 type="button"
                 onClick={startRun}
-                className="rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-8 py-3 text-base font-bold text-black shadow-lg shadow-orange-900/30 transition hover:brightness-110 active:scale-[0.98]"
+                disabled={!markerReady}
+                className="rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-8 py-3 text-base font-bold text-black shadow-lg shadow-orange-900/30 transition hover:brightness-110 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Start run
               </button>
             </div>
+            {!markerReady && (
+              <p className="text-right text-xs font-semibold text-red-300">
+                Start is blocked until the local marker bridge reports serial ready.
+              </p>
+            )}
           </div>
         )}
 

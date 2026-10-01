@@ -1,0 +1,90 @@
+schema_version: 1
+minimum_code: 1
+maximum_code: 255
+
+# Only events emitted by the participant game are serial-routed, plus the
+# operator dashboard's explicit preflight test marker. Rich context remains in
+# the local raw label; EmotivPRO receives the configured one-byte code.
+markers:
+  - code: 1
+    name: SESSION_START
+    category: session
+    origin: driver_moral_simulator
+    event_type: session_start
+    match: {}
+    description: Participant game session started
+
+  - code: 2
+    name: SESSION_END
+    category: session
+    origin: driver_moral_simulator
+    event_type: session_end
+    match: {}
+    description: Participant game session ended
+
+  - code: 20
+    name: TRIAL_START
+    category: trial
+    origin: driver_moral_simulator
+    event_type: trial_start
+    match: {}
+    description: Participant trial started
+
+  - code: 21
+    name: TRIAL_END
+    category: trial
+    origin: driver_moral_simulator
+    event_type: trial_end
+    match: {}
+    description: Participant trial ended
+
+  - code: 40
+    name: SCENARIO_ONSET
+    category: stimulus
+    origin: driver_moral_simulator
+    event_type: scenario_onset
+    match: {}
+    description: Moral-driving scenario appeared
+
+  - code: 80
+    name: OUTCOME_SHOWN
+    category: outcome
+    origin: driver_moral_simulator
+    event_type: outcome_shown
+    match: {}
+    description: Trial outcome appeared
+
+  - code: 60
+    name: CHOICE_LEFT
+    category: response
+    origin: driver_moral_simulator
+    event_type: choice
+    match:
+      side: left
+    description: Participant chose left
+
+  - code: 61
+    name: CHOICE_RIGHT
+    category: response
+    origin: driver_moral_simulator
+    event_type: choice
+    match:
+      side: right
+    description: Participant chose right
+
+  - code: 62
+    name: CHOICE_TIMEOUT
+    category: response
+    origin: driver_moral_simulator
+    event_type: choice
+    match:
+      side: timeout
+    description: Participant response window expired
+
+  - code: 10
+    name: SERIAL_TEST
+    category: test
+    origin: operator_dashboard
+    event_type: test_marker
+    match: {}
+    description: Operator-requested EmotivPRO serial preflight marker

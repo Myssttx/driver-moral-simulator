@@ -150,20 +150,31 @@ function downloadCsv(rows, sessionId) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `${sessionId}_lsl_marker_log.csv`;
+  anchor.download = `${sessionId}_browser_marker_log.csv`;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-function StatusPill({ status }) {
-  const state = {
-    open: ["bg-emerald-400", "text-emerald-200", "Bridge connected"],
-    connecting: ["bg-amber-400", "text-amber-200", "Bridge connecting"],
-    closed: ["bg-rose-500", "text-rose-200", "Bridge closed"],
-    disabled: ["bg-zinc-500", "text-zinc-300", "Markers disabled"],
-  }[status] ?? ["bg-zinc-500", "text-zinc-300", `Bridge ${status}`];
+function StatusPill({ status, bridgeInfo, lastError }) {
+  const serial = bridgeInfo?.serial;
+  let state;
+  if (lastError) {
+    state = ["bg-rose-500", "text-rose-200", "Marker error"];
+  } else if (status === "open" && serial?.mode === "hardware" && serial?.ready) {
+    state = ["bg-emerald-400", "text-emerald-200", "Serial ready"];
+  } else if (status === "open" && serial?.mode === "simulation") {
+    state = ["bg-amber-400", "text-amber-200", "Serial simulation"];
+  } else {
+    state = {
+      open: ["bg-cyan-400", "text-cyan-200", "Bridge ready / serial off"],
+      connecting: ["bg-amber-400", "text-amber-200", "Bridge connecting"],
+      handshaking: ["bg-amber-400", "text-amber-200", "Bridge preflight"],
+      closed: ["bg-rose-500", "text-rose-200", "Bridge closed"],
+      disabled: ["bg-zinc-500", "text-zinc-300", "Markers disabled"],
+    }[status] ?? ["bg-zinc-500", "text-zinc-300", `Bridge ${status}`];
+  }
 
   return (
     <span className="inline-flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1 text-xs font-semibold">
@@ -205,8 +216,15 @@ export default function SplitOrStealDashboard() {
   const [roundState, setRoundState] = useState(emptyRoundState);
   const [serialState, setSerialState] = useState(emptySerialState);
 
-  const { pushMarker, status: lslStatus, lastAck } = useLSLMarkers({
+  const {
+    pushMarker,
+    status: markerStatus,
+    lastAck,
+    bridgeInfo,
+    lastError,
+  } = useLSLMarkers({
     enabled: LSL_ENABLED,
+    source: "operator_dashboard",
   });
 
   const activeSection = useMemo(
@@ -232,7 +250,7 @@ export default function SplitOrStealDashboard() {
       {
         id: `${Date.now()}_${rows.length}`,
         localTime,
-        delivery: sent ? "sent" : "buffered",
+        delivery: sent ? "bridge_queued" : "rejected",
         eventLabel,
         marker: label,
       },
@@ -242,12 +260,13 @@ export default function SplitOrStealDashboard() {
   }, [counterbalance, participantId, pushMarker, sessionId]);
 
   const sendProtocolEvent = useCallback((event) => {
-    sendMarker(event.marker, {
+    const queued = sendMarker(event.marker, {
       step: event.step,
       phase: event.phase,
       round: event.round,
       opponent_kind: event.opponent_kind,
     }, event.label);
+    if (!queued) return;
     setCompletedEvents((prev) => ({
       ...prev,
       [event.id]: new Date().toISOString(),
@@ -372,14 +391,19 @@ export default function SplitOrStealDashboard() {
         <div className="mx-auto flex max-w-7xl flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-sm font-semibold text-cyan-200">Split-or-Steal Protocol</p>
-            <h1 className="text-2xl font-bold text-zinc-50">LSL Marker Dashboard</h1>
+            <h1 className="text-2xl font-bold text-zinc-50">Serial / LSL Marker Dashboard</h1>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <StatusPill status={lslStatus} />
+            <StatusPill
+              status={markerStatus}
+              bridgeInfo={bridgeInfo}
+              lastError={lastError}
+            />
             <button
               type="button"
+              disabled={markerStatus !== "open"}
               onClick={() => sendMarker("test_marker", { phase: "system", event: "operator_test" }, "Test marker")}
-              className="rounded-md border border-cyan-700 bg-cyan-950 px-4 py-2 text-sm font-semibold text-cyan-100 transition hover:border-cyan-400"
+              className="rounded-md border border-cyan-700 bg-cyan-950 px-4 py-2 text-sm font-semibold text-cyan-100 transition hover:border-cyan-400 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Send test marker
             </button>
@@ -433,7 +457,32 @@ export default function SplitOrStealDashboard() {
                 <p className="font-mono text-zinc-300">{STREAM_LABEL}</p>
                 <p className="mt-1 font-mono">{BRIDGE_LABEL}</p>
                 <p className="mt-2">Sent events: {completedCount}</p>
-                <p>Last ACK: {lastAck?.n ? `#${lastAck.n}` : "none"}</p>
+                <p>Serial mode: {bridgeInfo?.serial?.mode ?? "unknown"}</p>
+                <p>Serial ready: {bridgeInfo?.serial?.ready ? "yes" : "no"}</p>
+                {bridgeInfo?.serial?.port && (
+                  <p className="break-all font-mono">Port: {bridgeInfo.serial.port}</p>
+                )}
+                <p>Last ACK: {lastAck?.sequence ? `#${lastAck.sequence}` : "none"}</p>
+                {lastAck?.marker_code != null && (
+                  <p>Last byte: {lastAck.marker_code} ({lastAck.marker_name})</p>
+                )}
+                {lastAck?.serial?.status && (
+                  <p>Serial result: {lastAck.serial.status}</p>
+                )}
+                {lastAck?.serial?.bytes_written != null && (
+                  <p>Bytes written: {lastAck.serial.bytes_written}</p>
+                )}
+                {lastAck?.serial?.error && (
+                  <p className="mt-1 break-words font-semibold text-rose-300">
+                    {lastAck.serial.error}
+                  </p>
+                )}
+                {lastError && (
+                  <p className="mt-1 break-words font-semibold text-rose-300">{lastError}</p>
+                )}
+                <p className="mt-2 border-t border-zinc-800 pt-2">
+                  “written” means the OS accepted one byte; verify receipt in EmotivPRO/export.
+                </p>
               </div>
             </div>
           </section>
@@ -692,7 +741,7 @@ export default function SplitOrStealDashboard() {
                       <div className="mb-1 flex items-center justify-between gap-2">
                         <p className="min-w-0 truncate text-sm font-semibold text-zinc-100">{entry.eventLabel}</p>
                         <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                          entry.delivery === "sent" ? "bg-emerald-500/15 text-emerald-200" : "bg-amber-500/15 text-amber-200"
+                          entry.delivery === "bridge_queued" ? "bg-cyan-500/15 text-cyan-200" : "bg-rose-500/15 text-rose-200"
                         }`}>
                           {entry.delivery}
                         </span>

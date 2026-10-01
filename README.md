@@ -22,43 +22,162 @@ Difficulty increases in four fixed blocks of five rounds:
 - Rounds 11-15: roles and pets with tighter counts
 - Rounds 16-20: maximum dilemma cases
 
-## Split-or-Steal LSL dashboard
+## EmotivPRO serial markers
 
-The protocol marker dashboard is available at:
+The game now uses one timing path for both the participant task and the operator
+dashboard:
 
-```bash
-http://localhost:3000/split-or-steal
+```text
+browser event
+  -> localhost WebSocket
+  -> Python marker bridge
+       -> one configured raw uint8 serial byte -> EmotivPRO
+       -> optional rich string label -> LSL
+       -> append-and-flush audit CSV
+  <- ACK/NACK with code, write timing, and error state
 ```
 
-For EmotivPRO recordings, start the local LSL bridge before the session:
+The browser never opens the serial device. `python/marker_bridge.py` owns it,
+serializes writes from every tab, and checks that each hardware write accepted
+exactly one byte. It sends binary `bytes((code,))`: not ASCII digits and not a
+line ending.
+
+### Install and inspect
+
+Python 3.11 or newer is required.
 
 ```bash
+python3 -m venv python/.venv
+source python/.venv/bin/activate            # Windows: python\.venv\Scripts\activate
 python3 -m pip install -r python/requirements.txt
-python3 python/marker_bridge.py
+
+python3 python/marker_bridge.py --print-codebook
+python3 python/marker_bridge.py --list-serial-ports
+python3 -m unittest discover -s python/tests -v
 ```
 
-EmotivPRO should discover the marker outlet named `SplitOrStealProtocolMarkers`.
-The dashboard sends pipe-delimited string markers for consent, surveys,
-equipment setup, baseline, every Split-or-Steal round event, serial sevens,
-trolley task boundaries, equipment removal, post-survey, debrief, and session
-bookends. Use the dashboard CSV export as the operator-side marker log.
+Marker routes live only in `python/config/markers.yaml`. Serial framing, flow
+control, port defaults, and failure policy live in `python/config/serial.yaml`.
+Both effective configurations are snapshotted beside each bridge audit CSV.
 
-To also get an independent, portable marker log (in case the dashboard export
-isn't available, or as a cross-check), run the session logger alongside the
-bridge. It detects every marker on the `SplitOrStealProtocolMarkers` stream in
-real time and writes it, with its LSL timestamp, to CSV — it never records
-raw EEG (EmotivPRO stays the authoritative recorder for that):
+The initial codebook is a lab decision and should be frozen before collecting
+research data:
+
+| Byte | Browser source | Event |
+| ---: | --- | --- |
+| 1 | driver game | session start |
+| 2 | driver game | session end |
+| 10 | operator dashboard | explicit serial test |
+| 20 | driver game | trial start |
+| 21 | driver game | trial end |
+| 40 | driver game | scenario onset |
+| 60 | driver game | left choice |
+| 61 | driver game | right choice |
+| 62 | driver game | timeout |
+| 80 | driver game | outcome shown |
+
+Only the dashboard's **Send test marker** control has a serial assignment.
+Other dashboard protocol controls remain LSL-only until they receive deliberate
+codes in the YAML file. Source-scoped routing prevents a dashboard
+`session_start` from accidentally emitting the driver's byte `1`.
+
+### Simulation before connecting EmotivPRO
+
+This exercises browser routing, ACKs, code selection, CSV durability, and the
+full 102-event participant run without claiming that hardware received bytes:
+
+```bash
+source python/.venv/bin/activate
+python3 python/marker_bridge.py --serial-simulate --disable-lsl
+```
+
+In another terminal:
+
+```bash
+npm run dev
+```
+
+Open `http://localhost:3000/split-or-steal`, click **Send test marker**, and
+confirm the dashboard shows code `10` with result `simulated`. Audit files are
+written under `python/sessions/` and flushed after every event. A complete
+20-trial driver run contains 102 events: session bookends plus five events per
+trial.
+
+### Real paired-port test with EmotivPRO
+
+On one computer, the bridge and EmotivPRO need the opposite ends of a paired
+virtual/null-modem serial connection. A physical serial pair also works. Do not
+give both programs the same endpoint; only one process can own a port.
+
+1. Create or attach the pair and note its **sender** and **receiver** names.
+2. In EmotivPRO, add a serial marker source using the receiver endpoint.
+3. Set both sides to `115200` baud, `8` data bits, parity `N`, `1` stop bit,
+   and no software/hardware flow control.
+4. Start an EmotivPRO recording and arm the serial marker source.
+5. Start the bridge on the sender endpoint, replacing the example path:
+
+   ```bash
+   source python/.venv/bin/activate
+   python3 python/marker_bridge.py \
+     --serial-port /dev/cu.YOUR-SENDER-END \
+     --disable-lsl
+   ```
+
+   Windows example: `--serial-port COM5`. Linux example:
+   `--serial-port /dev/ttyUSB0`.
+
+6. Start the web app, open `http://localhost:3000/split-or-steal`, and click
+   **Send test marker** several times. The UI must show code `10`, result
+   `written`, and `bytes_written: 1` in the bridge ACK/log.
+7. Confirm the markers appear in EmotivPRO during recording/playback, then
+   export a short recording and verify the integer sequence in the exported
+   marker channel.
+
+For the serial validation run, leave the bridge's LSL output disabled and do
+not arm the LSL marker inlet in EmotivPRO. Otherwise the same logical event can
+appear twice and obscure which transport worked. After serial is verified, LSL
+can be re-enabled by omitting `--disable-lsl` if the study intentionally needs
+both outputs.
+
+The dashboard deliberately distinguishes these states:
+
+- `simulated`: routing worked, but no byte left the bridge;
+- `written`: the operating system accepted exactly one byte;
+- `failed`: the write raised an error or was short;
+- `unmapped`: the event intentionally has no serial code;
+- EmotivPRO verified: only manual observation and/or the exported recording can
+  establish this. The bridge never claims it automatically.
+
+### Acquisition safeguards and logs
+
+- The participant **Start run** button is blocked until the protocol-v2 bridge
+  reports serial hardware or simulation ready. Set
+  `NEXT_PUBLIC_REQUIRE_SERIAL=false` only for intentional LSL-only work.
+- Disconnected events are rejected, not buffered and replayed with a false late
+  timestamp.
+- Every received event, including unmapped events and failed serial writes, is
+  appended immediately to `python/sessions/bridge_*_markers.csv`.
+- `bridge_*_markers_metadata.json` records the effective codebook, serial
+  settings, start/end status, and counters.
+- A green serial state proves the sender endpoint opened. A `written` ACK proves
+  one OS write. Neither proves EmotivPRO stored the byte.
+
+For intentional standalone play with no EEG marker bridge, launch Next.js with
+`NEXT_PUBLIC_LSL_ENABLED=false`. The variable name is retained for compatibility
+but now disables all bridge outputs, including serial.
+
+### Optional LSL cross-check
+
+When the bridge is started without `--disable-lsl`, EmotivPRO can discover the
+rich string outlet `SplitOrStealProtocolMarkers`. The independent LSL-only
+listener remains available:
 
 ```bash
 python3 python/session_logger.py
-# writes to python/sessions/session_<UTC timestamp>.csv by default
 ```
 
-It fails loudly (no CSV written) if the marker bridge isn't already running.
-Add `--monitor-eeg` to also print live per-channel min/max sanity stats
-from the EEG LSL stream (never saved to disk) — useful to confirm the
-headset is actually streaming before starting a real session. Run
-`python3 python/session_logger.py --help` for all options.
+It writes `python/sessions/session_<UTC timestamp>.csv` and can monitor live EEG
+with `--monitor-eeg`; it does not prove that serial markers were received.
 
 ## Getting Started
 
