@@ -100,7 +100,7 @@ class MarkerBridgeTests(unittest.TestCase):
         self.assertEqual(rows[0]["marker_code"], "60")
         self.assertEqual(rows[0]["serial_simulated"], "True")
 
-    def test_operator_test_routes_but_other_dashboard_event_stays_unmapped(self) -> None:
+    def test_operator_test_and_protocol_event_route_to_serial(self) -> None:
         test_reply = self.process(
             envelope("test_marker|phase=system", source="operator_dashboard", marker_id="test")
         )
@@ -112,9 +112,9 @@ class MarkerBridgeTests(unittest.TestCase):
         self.assertEqual(test_reply["marker_code"], 10)
         self.assertEqual(test_reply["serial"]["status"], "simulated")
         self.assertEqual(other_reply["type"], "ack")
-        self.assertIsNone(other_reply["marker_code"])
-        self.assertEqual(other_reply["serial"]["status"], "unmapped")
-        self.assertEqual(self.rows()[1]["event_name"], "UNMAPPED")
+        self.assertEqual(other_reply["marker_code"], 101)
+        self.assertEqual(other_reply["serial"]["status"], "simulated")
+        self.assertEqual(self.rows()[1]["event_name"], "CONSENT_START")
 
     def test_unmapped_driver_choice_is_a_visible_nack_and_is_logged(self) -> None:
         reply = self.process(envelope("choice|session=run_1|trial=01|side=up"))

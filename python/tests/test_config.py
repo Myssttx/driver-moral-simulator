@@ -15,9 +15,11 @@ class MarkerConfigTests(unittest.TestCase):
     def test_project_configuration_loads_and_indexes_all_routes(self) -> None:
         config = load_marker_config(PYTHON_DIR / "config" / "markers.yaml")
 
-        self.assertEqual(len(config), 10)
+        self.assertEqual(len(config), 74)
         self.assertEqual(config.require("SCENARIO_ONSET").code, 40)
         self.assertEqual(config.by_code[10].name, "SERIAL_TEST")
+        self.assertEqual(config.by_code[100].name, "DASHBOARD_SESSION_START")
+        self.assertEqual(config.by_code[172].name, "OPERATOR_RESUME")
 
     def test_duplicate_code_is_rejected(self) -> None:
         body = """schema_version: 1

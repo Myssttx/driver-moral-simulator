@@ -2,9 +2,9 @@ schema_version: 1
 minimum_code: 1
 maximum_code: 255
 
-# Only events emitted by the participant game are serial-routed, plus the
-# operator dashboard's explicit preflight test marker. Rich context remains in
-# the local raw label; EmotivPRO receives the configured one-byte code.
+# Participant-game and operator-dashboard actions are serial-routed. Rich
+# context remains in the local raw label; EmotivPRO receives the configured
+# one-byte code. Dashboard codes occupy 100-172 except for preflight code 10.
 markers:
   - code: 1
     name: SESSION_START
@@ -88,3 +88,519 @@ markers:
     event_type: test_marker
     match: {}
     description: Operator-requested EmotivPRO serial preflight marker
+
+  # Operator protocol milestones: 100-126
+  - code: 100
+    name: DASHBOARD_SESSION_START
+    category: dashboard_protocol
+    origin: operator_dashboard
+    event_type: session_start
+    match: {}
+    description: Operator protocol session started
+
+  - code: 101
+    name: CONSENT_START
+    category: dashboard_protocol
+    origin: operator_dashboard
+    event_type: consent_start
+    match: {}
+    description: Introduction and consent started
+
+  - code: 102
+    name: CONSENT_SIGNED
+    category: dashboard_protocol
+    origin: operator_dashboard
+    event_type: consent_signed
+    match: {}
+    description: Participant consent signed
+
+  - code: 103
+    name: PRE_TASK_SURVEY_START
+    category: dashboard_protocol
+    origin: operator_dashboard
+    event_type: pre_task_survey_start
+    match: {}
+    description: Pre-task survey started
+
+  - code: 104
+    name: PRE_TASK_SURVEY_COMPLETE
+    category: dashboard_protocol
+    origin: operator_dashboard
+    event_type: pre_task_survey_complete
+    match: {}
+    description: Pre-task survey completed
+
+  - code: 105
+    name: EQUIPMENT_SETUP_START
+    category: dashboard_protocol
+    origin: operator_dashboard
+    event_type: equipment_setup_start
+    match: {}
+    description: Equipment setup started
+
+  - code: 106
+    name: EMOTIV_SETUP_COMPLETE
+    category: dashboard_protocol
+    origin: operator_dashboard
+    event_type: emotiv_setup_complete
+    match: {}
+    description: Emotiv setup completed
+
+  - code: 107
+    name: EMOTIBIT_SETUP_COMPLETE
+    category: dashboard_protocol
+    origin: operator_dashboard
+    event_type: emotibit_setup_complete
+    match: {}
+    description: EmotiBit setup completed
+
+  - code: 108
+    name: BASELINE_START
+    category: dashboard_protocol
+    origin: operator_dashboard
+    event_type: baseline_start
+    match: {}
+    description: Baseline recording started
+
+  - code: 109
+    name: BASELINE_END
+    category: dashboard_protocol
+    origin: operator_dashboard
+    event_type: baseline_end
+    match: {}
+    description: Baseline recording ended
+
+  - code: 110
+    name: SOS_RULES_START
+    category: dashboard_protocol
+    origin: operator_dashboard
+    event_type: sos_rules_start
+    match: {}
+    description: Split-or-Steal rules explanation started
+
+  - code: 111
+    name: SOS_RULES_END
+    category: dashboard_protocol
+    origin: operator_dashboard
+    event_type: sos_rules_end
+    match: {}
+    description: Split-or-Steal rules explanation completed
+
+  - code: 112
+    name: SOS_PRACTICE_PROMPT
+    category: dashboard_protocol
+    origin: operator_dashboard
+    event_type: sos_practice_prompt
+    match: {}
+    description: Practice-round prompt shown
+
+  - code: 113
+    name: SOS_HUMAN_PROMPT
+    category: dashboard_protocol
+    origin: operator_dashboard
+    event_type: sos_human_prompt
+    match: {}
+    description: Human-round prompt shown
+
+  - code: 114
+    name: SOS_AI_PROMPT
+    category: dashboard_protocol
+    origin: operator_dashboard
+    event_type: sos_ai_prompt
+    match: {}
+    description: AI-round prompt shown
+
+  - code: 115
+    name: SOS_UNKNOWN_PROMPT
+    category: dashboard_protocol
+    origin: operator_dashboard
+    event_type: sos_unknown_prompt
+    match: {}
+    description: Unknown-opponent prompt shown
+
+  - code: 116
+    name: TROLLEY_RULES_START
+    category: dashboard_protocol
+    origin: operator_dashboard
+    event_type: trolley_rules_start
+    match: {}
+    description: Trolley rules started
+
+  - code: 117
+    name: TROLLEY_RULES_END
+    category: dashboard_protocol
+    origin: operator_dashboard
+    event_type: trolley_rules_end
+    match: {}
+    description: Trolley rules completed
+
+  - code: 118
+    name: TROLLEY_TASK_START
+    category: dashboard_protocol
+    origin: operator_dashboard
+    event_type: trolley_task_start
+    match: {}
+    description: Trolley task started
+
+  - code: 119
+    name: TROLLEY_TASK_END
+    category: dashboard_protocol
+    origin: operator_dashboard
+    event_type: trolley_task_end
+    match: {}
+    description: Trolley task ended
+
+  - code: 120
+    name: EQUIPMENT_REMOVAL_START
+    category: dashboard_protocol
+    origin: operator_dashboard
+    event_type: equipment_removal_start
+    match: {}
+    description: Equipment removal started
+
+  - code: 121
+    name: EQUIPMENT_REMOVED
+    category: dashboard_protocol
+    origin: operator_dashboard
+    event_type: equipment_removed
+    match: {}
+    description: Equipment removal completed
+
+  - code: 122
+    name: POST_TASK_SURVEY_START
+    category: dashboard_protocol
+    origin: operator_dashboard
+    event_type: post_task_survey_start
+    match: {}
+    description: Post-task survey started
+
+  - code: 123
+    name: POST_TASK_SURVEY_COMPLETE
+    category: dashboard_protocol
+    origin: operator_dashboard
+    event_type: post_task_survey_complete
+    match: {}
+    description: Post-task survey completed
+
+  - code: 124
+    name: DEBRIEF_START
+    category: dashboard_protocol
+    origin: operator_dashboard
+    event_type: debrief_start
+    match: {}
+    description: Debrief started
+
+  - code: 125
+    name: DEBRIEF_END
+    category: dashboard_protocol
+    origin: operator_dashboard
+    event_type: debrief_end
+    match: {}
+    description: Debrief completed
+
+  - code: 126
+    name: DASHBOARD_SESSION_END
+    category: dashboard_protocol
+    origin: operator_dashboard
+    event_type: session_end
+    match: {}
+    description: Operator protocol session ended
+
+  # Split-or-Steal rounds: 130-157
+  - code: 130
+    name: SOS_PRACTICE_ROUND_START
+    category: dashboard_round
+    origin: operator_dashboard
+    event_type: sos_round_start
+    match: {round: practice}
+    description: Practice round started
+
+  - code: 131
+    name: SOS_HUMAN_ROUND_START
+    category: dashboard_round
+    origin: operator_dashboard
+    event_type: sos_round_start
+    match: {round: human}
+    description: Human round started
+
+  - code: 132
+    name: SOS_AI_ROUND_START
+    category: dashboard_round
+    origin: operator_dashboard
+    event_type: sos_round_start
+    match: {round: ai}
+    description: AI round started
+
+  - code: 133
+    name: SOS_UNKNOWN_ROUND_START
+    category: dashboard_round
+    origin: operator_dashboard
+    event_type: sos_round_start
+    match: {round: unknown}
+    description: Unknown-opponent round started
+
+  - code: 134
+    name: SOS_PRACTICE_PARTICIPANT_SPLIT
+    category: dashboard_choice
+    origin: operator_dashboard
+    event_type: sos_choice
+    match: {round: practice, actor: participant, choice: split}
+    description: Practice participant chose split
+
+  - code: 135
+    name: SOS_PRACTICE_PARTICIPANT_STEAL
+    category: dashboard_choice
+    origin: operator_dashboard
+    event_type: sos_choice
+    match: {round: practice, actor: participant, choice: steal}
+    description: Practice participant chose steal
+
+  - code: 136
+    name: SOS_PRACTICE_OPPONENT_SPLIT
+    category: dashboard_choice
+    origin: operator_dashboard
+    event_type: sos_choice
+    match: {round: practice, actor: opponent, choice: split}
+    description: Practice opponent chose split
+
+  - code: 137
+    name: SOS_PRACTICE_OPPONENT_STEAL
+    category: dashboard_choice
+    origin: operator_dashboard
+    event_type: sos_choice
+    match: {round: practice, actor: opponent, choice: steal}
+    description: Practice opponent chose steal
+
+  - code: 138
+    name: SOS_HUMAN_PARTICIPANT_SPLIT
+    category: dashboard_choice
+    origin: operator_dashboard
+    event_type: sos_choice
+    match: {round: human, actor: participant, choice: split}
+    description: Human-round participant chose split
+
+  - code: 139
+    name: SOS_HUMAN_PARTICIPANT_STEAL
+    category: dashboard_choice
+    origin: operator_dashboard
+    event_type: sos_choice
+    match: {round: human, actor: participant, choice: steal}
+    description: Human-round participant chose steal
+
+  - code: 140
+    name: SOS_HUMAN_OPPONENT_SPLIT
+    category: dashboard_choice
+    origin: operator_dashboard
+    event_type: sos_choice
+    match: {round: human, actor: opponent, choice: split}
+    description: Human opponent chose split
+
+  - code: 141
+    name: SOS_HUMAN_OPPONENT_STEAL
+    category: dashboard_choice
+    origin: operator_dashboard
+    event_type: sos_choice
+    match: {round: human, actor: opponent, choice: steal}
+    description: Human opponent chose steal
+
+  - code: 142
+    name: SOS_AI_PARTICIPANT_SPLIT
+    category: dashboard_choice
+    origin: operator_dashboard
+    event_type: sos_choice
+    match: {round: ai, actor: participant, choice: split}
+    description: AI-round participant chose split
+
+  - code: 143
+    name: SOS_AI_PARTICIPANT_STEAL
+    category: dashboard_choice
+    origin: operator_dashboard
+    event_type: sos_choice
+    match: {round: ai, actor: participant, choice: steal}
+    description: AI-round participant chose steal
+
+  - code: 144
+    name: SOS_AI_OPPONENT_SPLIT
+    category: dashboard_choice
+    origin: operator_dashboard
+    event_type: sos_choice
+    match: {round: ai, actor: opponent, choice: split}
+    description: AI opponent chose split
+
+  - code: 145
+    name: SOS_AI_OPPONENT_STEAL
+    category: dashboard_choice
+    origin: operator_dashboard
+    event_type: sos_choice
+    match: {round: ai, actor: opponent, choice: steal}
+    description: AI opponent chose steal
+
+  - code: 146
+    name: SOS_UNKNOWN_PARTICIPANT_SPLIT
+    category: dashboard_choice
+    origin: operator_dashboard
+    event_type: sos_choice
+    match: {round: unknown, actor: participant, choice: split}
+    description: Unknown-round participant chose split
+
+  - code: 147
+    name: SOS_UNKNOWN_PARTICIPANT_STEAL
+    category: dashboard_choice
+    origin: operator_dashboard
+    event_type: sos_choice
+    match: {round: unknown, actor: participant, choice: steal}
+    description: Unknown-round participant chose steal
+
+  - code: 148
+    name: SOS_UNKNOWN_OPPONENT_SPLIT
+    category: dashboard_choice
+    origin: operator_dashboard
+    event_type: sos_choice
+    match: {round: unknown, actor: opponent, choice: split}
+    description: Unknown opponent chose split
+
+  - code: 149
+    name: SOS_UNKNOWN_OPPONENT_STEAL
+    category: dashboard_choice
+    origin: operator_dashboard
+    event_type: sos_choice
+    match: {round: unknown, actor: opponent, choice: steal}
+    description: Unknown opponent chose steal
+
+  - code: 150
+    name: SOS_PRACTICE_OUTCOME_SHOWN
+    category: dashboard_outcome
+    origin: operator_dashboard
+    event_type: sos_outcome_shown
+    match: {round: practice}
+    description: Practice outcome shown
+
+  - code: 151
+    name: SOS_HUMAN_OUTCOME_SHOWN
+    category: dashboard_outcome
+    origin: operator_dashboard
+    event_type: sos_outcome_shown
+    match: {round: human}
+    description: Human-round outcome shown
+
+  - code: 152
+    name: SOS_AI_OUTCOME_SHOWN
+    category: dashboard_outcome
+    origin: operator_dashboard
+    event_type: sos_outcome_shown
+    match: {round: ai}
+    description: AI-round outcome shown
+
+  - code: 153
+    name: SOS_UNKNOWN_OUTCOME_SHOWN
+    category: dashboard_outcome
+    origin: operator_dashboard
+    event_type: sos_outcome_shown
+    match: {round: unknown}
+    description: Unknown-round outcome shown
+
+  - code: 154
+    name: SOS_PRACTICE_ROUND_END
+    category: dashboard_round
+    origin: operator_dashboard
+    event_type: sos_round_end
+    match: {round: practice}
+    description: Practice round ended
+
+  - code: 155
+    name: SOS_HUMAN_ROUND_END
+    category: dashboard_round
+    origin: operator_dashboard
+    event_type: sos_round_end
+    match: {round: human}
+    description: Human round ended
+
+  - code: 156
+    name: SOS_AI_ROUND_END
+    category: dashboard_round
+    origin: operator_dashboard
+    event_type: sos_round_end
+    match: {round: ai}
+    description: AI round ended
+
+  - code: 157
+    name: SOS_UNKNOWN_ROUND_END
+    category: dashboard_round
+    origin: operator_dashboard
+    event_type: sos_round_end
+    match: {round: unknown}
+    description: Unknown-opponent round ended
+
+  # Serial-sevens distractor tasks: 160-165
+  - code: 160
+    name: SERIAL_SEVENS_AFTER_HUMAN_START
+    category: dashboard_distractor
+    origin: operator_dashboard
+    event_type: serial_sevens_start
+    match: {task: after_human}
+    description: Post-human serial-sevens task started
+
+  - code: 161
+    name: SERIAL_SEVENS_AFTER_HUMAN_END
+    category: dashboard_distractor
+    origin: operator_dashboard
+    event_type: serial_sevens_end
+    match: {task: after_human}
+    description: Post-human serial-sevens task ended
+
+  - code: 162
+    name: SERIAL_SEVENS_AFTER_AI_START
+    category: dashboard_distractor
+    origin: operator_dashboard
+    event_type: serial_sevens_start
+    match: {task: after_ai}
+    description: Post-AI serial-sevens task started
+
+  - code: 163
+    name: SERIAL_SEVENS_AFTER_AI_END
+    category: dashboard_distractor
+    origin: operator_dashboard
+    event_type: serial_sevens_end
+    match: {task: after_ai}
+    description: Post-AI serial-sevens task ended
+
+  - code: 164
+    name: SERIAL_SEVENS_AFTER_UNKNOWN_START
+    category: dashboard_distractor
+    origin: operator_dashboard
+    event_type: serial_sevens_start
+    match: {task: after_unknown}
+    description: Post-unknown serial-sevens task started
+
+  - code: 165
+    name: SERIAL_SEVENS_AFTER_UNKNOWN_END
+    category: dashboard_distractor
+    origin: operator_dashboard
+    event_type: serial_sevens_end
+    match: {task: after_unknown}
+    description: Post-unknown serial-sevens task ended
+
+  # Fast operator annotations: 170-172
+  - code: 170
+    name: SIGNAL_QUALITY_ADJUSTMENT
+    category: dashboard_operator
+    origin: operator_dashboard
+    event_type: signal_quality_adjustment
+    match: {}
+    description: Emotiv electrodes re-wet or adjusted
+
+  - code: 171
+    name: OPERATOR_PAUSE
+    category: dashboard_operator
+    origin: operator_dashboard
+    event_type: operator_note
+    match: {event: pause}
+    description: Operator annotated a pause
+
+  - code: 172
+    name: OPERATOR_RESUME
+    category: dashboard_operator
+    origin: operator_dashboard
+    event_type: operator_note
+    match: {event: resume}
+    description: Operator annotated a resume

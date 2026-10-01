@@ -63,23 +63,29 @@ Both effective configurations are snapshotted beside each bridge audit CSV.
 The initial codebook is a lab decision and should be frozen before collecting
 research data:
 
-| Byte | Browser source | Event |
+| Byte or range | Browser source | Event group |
 | ---: | --- | --- |
-| 1 | driver game | session start |
-| 2 | driver game | session end |
+| 1-2 | driver game | session start/end |
 | 10 | operator dashboard | explicit serial test |
-| 20 | driver game | trial start |
-| 21 | driver game | trial end |
+| 20-21 | driver game | trial start/end |
 | 40 | driver game | scenario onset |
-| 60 | driver game | left choice |
-| 61 | driver game | right choice |
-| 62 | driver game | timeout |
+| 60-62 | driver game | left/right/timeout choice |
 | 80 | driver game | outcome shown |
+| 100-109 | operator dashboard | session, consent, survey, equipment, baseline |
+| 110-115 | operator dashboard | Split-or-Steal rules and prompts |
+| 116-119 | operator dashboard | trolley rules and task start/end |
+| 120-126 | operator dashboard | equipment removal, post-survey, debrief, session end |
+| 130-133 | operator dashboard | round start by opponent condition |
+| 134-149 | operator dashboard | round, actor, and split/steal choice combinations |
+| 150-153 | operator dashboard | outcome shown by opponent condition |
+| 154-157 | operator dashboard | round end by opponent condition |
+| 160-165 | operator dashboard | serial-sevens start/end by placement |
+| 170-172 | operator dashboard | signal adjustment, pause, and resume |
 
-Only the dashboard's **Send test marker** control has a serial assignment.
-Other dashboard protocol controls remain LSL-only until they receive deliberate
-codes in the YAML file. Source-scoped routing prevents a dashboard
-`session_start` from accidentally emitting the driver's byte `1`.
+Every marker-producing dashboard control has a serial assignment. Use
+`python3 python/marker_bridge.py --print-codebook` for the exact byte-to-name
+table. Source-scoped routing keeps the dashboard's session codes `100` and
+`126` distinct from the participant game's session codes `1` and `2`.
 
 ### Simulation before connecting EmotivPRO
 
@@ -97,11 +103,12 @@ In another terminal:
 npm run dev
 ```
 
-Open `http://localhost:3000/split-or-steal`, click **Send test marker**, and
-confirm the dashboard shows code `10` with result `simulated`. Audit files are
-written under `python/sessions/` and flushed after every event. A complete
-20-trial driver run contains 102 events: session bookends plus five events per
-trial.
+Open `http://localhost:3000/split-or-steal`, click **Send test marker**, a
+protocol milestone, and several round controls. Confirm each ACK shows its
+configured code with result `simulated`; no supported dashboard action should
+show `unmapped`. Audit files are written under `python/sessions/` and flushed
+after every event. A complete 20-trial driver run contains 102 events: session
+bookends plus five events per trial.
 
 ### Real paired-port test with EmotivPRO
 
@@ -128,7 +135,9 @@ give both programs the same endpoint; only one process can own a port.
 
 6. Start the web app, open `http://localhost:3000/split-or-steal`, and click
    **Send test marker** several times. The UI must show code `10`, result
-   `written`, and `bytes_written: 1` in the bridge ACK/log.
+   `written`, and `bytes_written: 1` in the bridge ACK/log. Then send a
+   protocol milestone and a round choice and confirm their configured codes
+   are also `written` with one byte.
 7. Confirm the markers appear in EmotivPRO during recording/playback, then
    export a short recording and verify the integer sequence in the exported
    marker channel.
@@ -144,7 +153,7 @@ The dashboard deliberately distinguishes these states:
 - `simulated`: routing worked, but no byte left the bridge;
 - `written`: the operating system accepted exactly one byte;
 - `failed`: the write raised an error or was short;
-- `unmapped`: the event intentionally has no serial code;
+- `unmapped`: an unknown or malformed event has no serial code;
 - EmotivPRO verified: only manual observation and/or the exported recording can
   establish this. The bridge never claims it automatically.
 
